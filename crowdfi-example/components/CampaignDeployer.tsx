@@ -3,9 +3,12 @@ import { getAccount } from '@wagmi/core';
 import { TransactionReceipt, parseEther, zeroAddress } from 'viem';
 import { CampaignConfig, prepareCampaignDeployment } from '@withfabric/protocol-sdks';
 import styles from 'styles/Home.module.css';
-import CurrencyConverter from 'lib/CurrencyConverter';
+import { tokenToHuman } from '@lib/currencies';
 
-const converter = new CurrencyConverter();
+type PreparedDeployment = {
+  campaignAddress: `0x${string}`;
+  receipt: TransactionReceipt;
+};
 
 export default function CampaignDeployer({ isFetching, setIsFetching, onDeploy }: React.PropsWithChildren<{
   isFetching: boolean,
@@ -22,22 +25,25 @@ export default function CampaignDeployer({ isFetching, setIsFetching, onDeploy }
     durationSeconds: 60 * 60 * 24 * 7,
     erc20TokenAddress: zeroAddress,
   });
-  const preparedDeployment = useRef<() => Promise<{ campaignAddress: `0x${string}`, receipt: TransactionReceipt }>>();
+  const [preparedDeployment, setPreparedDeployment] = useState<() => Promise<PreparedDeployment>>();
+  const [deployedCampaignAddress, setDeployedCampaignAddress] = useState<`0x${string}`>('0xB0657a32FFD021095173685BeCFc4AA8c45fed98');
   
-
   async function deployCampaign(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setIsFetching(true);
 
-    if (!preparedDeployment.current) {
+    if (!preparedDeployment) {
       alert('No txn prepared');
       return;
     }
 
-    const { campaignAddress } = await preparedDeployment.current();
-
-    onDeploy(campaignAddress);
+    try {
+      const { campaignAddress } = await preparedDeployment();
+      onDeploy(campaignAddress);
+    } catch (error: any) {
+      alert(error);
+    }
 
     setIsFetching(false);
   }
@@ -46,12 +52,19 @@ export default function CampaignDeployer({ isFetching, setIsFetching, onDeploy }
     setIsFetching(true);
     try {
       const prepared = await prepareCampaignDeployment(config);
-      preparedDeployment.current = prepared;
+      setPreparedDeployment(() => prepared);
     } catch (error) {
       console.log('error', error);
     }
     setIsFetching(false);
   }, [config, setIsFetching]);
+
+  // dev only
+  useEffect(() => {
+    if (deployedCampaignAddress && deployedCampaignAddress.match(/^0x[0-9A-Fa-f]{40}$/)) {
+      onDeploy(deployedCampaignAddress);
+    }
+  }, [deployedCampaignAddress, onDeploy]);
 
   // prepare campaign deployment on config change
   useEffect(() => {
@@ -60,6 +73,10 @@ export default function CampaignDeployer({ isFetching, setIsFetching, onDeploy }
   
   return (
     <div className={`${styles.mainElement} ${styles.bgDark}`}>
+      <form className={styles.deployForm}>
+        <h3>Already have a deployed campaign?</h3>
+        <input type="text" value={deployedCampaignAddress} onChange={e => setDeployedCampaignAddress(e.target.value as `0x${string}`)} />
+      </form>
       <form onSubmit={deployCampaign} className={styles.deployForm}>
         <h3>Deploy A Campaign</h3>
         <label className={styles.label}>
@@ -72,7 +89,8 @@ export default function CampaignDeployer({ isFetching, setIsFetching, onDeploy }
         <input
           className={styles.input}
           type="number"
-          value={converter.tokenToHuman(config.minGoal, 18)}
+          step="0.01"
+          value={tokenToHuman(config.minGoal, 18)}
           onChange={e => setConfig({ ...config, minGoal: parseEther(e.target.value) })}
         />
         <label className={styles.label}>
@@ -81,7 +99,8 @@ export default function CampaignDeployer({ isFetching, setIsFetching, onDeploy }
         <input
           className={styles.input}
           type="number"
-          value={converter.tokenToHuman(config.maxGoal, 18)}
+          step="0.01"
+          value={tokenToHuman(config.maxGoal, 18)}
           onChange={e => setConfig({ ...config, maxGoal: parseEther(e.target.value) })}
         />
         <label className={styles.label}>
@@ -90,7 +109,8 @@ export default function CampaignDeployer({ isFetching, setIsFetching, onDeploy }
         <input
           className={styles.input}
           type="number"
-          value={converter.tokenToHuman(config.minContribution, 18)}
+          step="0.01"
+          value={tokenToHuman(config.minContribution, 18)}
           onChange={e => setConfig({ ...config, minContribution: parseEther(e.target.value) })}
         />
         <label className={styles.label}>
@@ -99,7 +119,8 @@ export default function CampaignDeployer({ isFetching, setIsFetching, onDeploy }
         <input
           className={styles.input}
           type="number"
-          value={converter.tokenToHuman(config.maxContribution, 18)}
+          step="0.01"
+          value={tokenToHuman(config.maxContribution, 18)}
           onChange={e => setConfig({ ...config, maxContribution: parseEther(e.target.value) })}
         />
         <label className={styles.label}>

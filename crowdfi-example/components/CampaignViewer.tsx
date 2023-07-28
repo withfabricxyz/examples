@@ -1,68 +1,53 @@
-import { fetchCampaignAccountContext, CampaignAccountContext } from '@withfabric/protocol-sdks';
 import { useEffect, useState } from 'react';
-import { parseEther } from 'viem';
+import { TransactionReceipt } from 'viem';
+import { fetchCampaignAccountContext, CampaignAccountContext } from '@withfabric/protocol-sdks';
 import styled from 'styled-components';
-import CurrencyConverter from '@lib/CurrencyConverter';
+
 import styles from 'styles/Home.module.css';
+import { tokenToHuman } from 'lib/currencies';
 
-const ContributeForm = styled.form`
+import ContributeForm from 'components/ContributeForm';
+import TransferForm from 'components/TransferForm';
+import YieldForm from 'components/YieldForm';
+import WithdrawForm from 'components/WithdrawForm';
+
+const Forms = styled.section`
   display: flex;
-  flex-direction: row;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 1rem;
 `;
 
-const RadioGroup = styled.div`
-  position: relative;
-`;
+type CampaignViewerProps = {
+  isFetching: boolean,
+  campaignAddress: `0x${string}` | null | undefined,
+  account: `0x${string}`,
+};
 
-const RadioButton = styled.label`
-  display: inline-block;
-  background-color: rgba(0, 0, 0, 0.03);
-  padding: 0.625rem 0.5rem;
-  border-radius: 0.25rem;
-  text-align: center;
-  font-weight: 500;
-
-  &:hover {
-    background-color: rgba(0, 0, 0, 0.1);
-    cursor: pointer;
-  }
-`;
-
-const RadioInput = styled.input`
-  position: absolute;
-  top: 0;
-  visibility: hidden;
-  opacity: 0;
-
-  &:checked + ${RadioButton} {
-    background-color: rgba(17, 125, 69, 1);
-    color: white;
-  }
-`;
-
-const converter = new CurrencyConverter();
-
-export default function CampaignViewer({ isFetching, campaignAddress, account }: { isFetching: boolean, campaignAddress: `0x${string}` | null | undefined, account: `0x${string}` }) {
+export default function CampaignViewer({ isFetching, campaignAddress, account } : CampaignViewerProps) {
   const [context, setContext] = useState<CampaignAccountContext | null>();
-  const [contribution, setContribution] = useState<string>('0');
-  // const [contributionValues, setContributionValues] = useState<string[]>(context?.account.minAllowedContribution.map(v => v.toString()) || []);
   
   useEffect(() => {
     if (!campaignAddress || !account) return;
-
+    
     async function fetch() {
       setContext(await fetchCampaignAccountContext({
         campaignAddress: campaignAddress!,
         account,
       }));
     }
-
+    
     fetch();
   }, [campaignAddress, account]);
+  
+  if (!context) return null;
+  
+  const isSuccess = (context.state.isGoalMinMet && context.state.isEnded) || context.state.isGoalMaxMet;
+  const userHasWithdrawableFunds = context.account.yieldTokenBalance > 0n || (context.state.isEnded && !context.state.isGoalMinMet && context.account.contributionTokenBalance > 0n);
+  const withdrawableFunds = isSuccess ? context.account.yieldTokenBalance : context.account.contributionTokenBalance;
 
-  async function contribute(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function onSuccessfulTxn(receipt: TransactionReceipt) {
+    alert('txn: ' + receipt.transactionHash);
+    setContext(await context!.refresh());
   }
 
   if (!campaignAddress) {
@@ -84,27 +69,41 @@ export default function CampaignViewer({ isFetching, campaignAddress, account }:
 
   return (
     <div className={styles.mainElement}>
-      <h3>Campaign Address</h3>
-      <p>{campaignAddress}</p>
-      {context && (
-        <>
-          <h3>Contribute</h3>
-          <ContributeForm onSubmit={contribute}>
-            <RadioGroup>
-              <RadioInput type="radio" name="contribution" value="0" id="contribution-min" onChange={e => setContribution(e.target.value)} />
-              <RadioButton htmlFor="contribution-min">{converter.tokenToHuman(context.account.minAllowedContribution, 18)} (min)</RadioButton>
-            </RadioGroup>
-            <RadioGroup>
-              <RadioInput type="radio" name="contribution" value="1" id="contribution-mid" onChange={e => setContribution(e.target.value)} />
-              <RadioButton htmlFor="contribution-mid">{Number(converter.tokenToHuman(context.account.maxAllowedContribution, 18)) / 2} (mid)</RadioButton>
-            </RadioGroup>
-            <RadioGroup>
-              <RadioInput type="radio" name="contribution" value="2" id="contribution-max" onChange={e => setContribution(e.target.value)} />
-              <RadioButton htmlFor="contribution-max">{converter.tokenToHuman(context.account.maxAllowedContribution, 18)} (max)</RadioButton>
-            </RadioGroup>
-          </ContributeForm>
-        </>
-      )}
+      <p><strong>Campaign Address:</strong> {campaignAddress}</p>
+      <p><strong>Raised:</strong> {isSuccess && '🙌'} {tokenToHuman(context.state.totalSupply, 18)} ETH {isSuccess && '🥳'}</p>
+      <p><strong>Goal:</strong> {tokenToHuman(context.state.goalMin, 18)} ETH</p>
+      <p><strong>Ends:</strong> {context.state.endsAt.toLocaleString()} (campaign will end before this date if max goal is met)</p>
+      <p><strong>Total Funds Returned (Yield) by Creator:</strong> {tokenToHuman(context.state.yieldTotal, 18)} ETH</p>
+      <p><strong>Amount this Account can Withdraw:</strong> {tokenToHuman(withdrawableFunds, 18)} ETH</p>
+      <Forms>
+        {isSuccess && (
+          <YieldForm
+            context={context}
+            onYield={onSuccessfulTxn}
+          />
+        )}
+        {!context.state.isEnded && context.state.isContributionAllowed && (
+          <ContributeForm
+            context={context}
+            onContribute={onSuccessfulTxn}
+          />
+        )}
+        {context.state.isTransferAllowed && (
+          <TransferForm
+            context={context}
+            transferableFunds={context.state.totalSupply}
+            recipientAddress={context.state.recipientAddress}
+            onTransfer={onSuccessfulTxn}
+          />
+        )}
+        {userHasWithdrawableFunds && (
+          <WithdrawForm
+            context={context}
+            withdrawableFunds={withdrawableFunds}
+            onWithdraw={onSuccessfulTxn}
+          />
+        )}
+      </Forms>
     </div>
   );
 }
