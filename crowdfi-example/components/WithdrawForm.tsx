@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { FetchTokenResult } from '@wagmi/core';
 import { TransactionReceipt, parseUnits } from 'viem';
 import styled from 'styled-components';
 import { CampaignAccountContext } from '@withfabric/protocol-sdks';
@@ -21,6 +22,7 @@ const SubmitButton = styled.button`
   text-align: center;
   color: white;
   margin-top: 0.75rem;
+  font-weight: 500;
 
   &:hover {
     cursor: pointer;
@@ -37,10 +39,11 @@ const SubmitButton = styled.button`
 type WithdrawFormProps = {
   context: CampaignAccountContext;
   withdrawableFunds: bigint;
+  token: FetchTokenResult | undefined | null;
   onWithdraw: (receipt: TransactionReceipt) => void;
 };
 
-export default function WithdrawForm({ context, withdrawableFunds, onWithdraw } : WithdrawFormProps) {
+export default function WithdrawForm({ context, withdrawableFunds, token, onWithdraw } : WithdrawFormProps) {
   const [isPreparing, setIsPreparing] = useState<boolean>(false);
   const [isPolling, setIsPolling] = useState<boolean>(false);
 
@@ -93,7 +96,7 @@ export default function WithdrawForm({ context, withdrawableFunds, onWithdraw } 
       <form onSubmit={withdraw}>
         <h3>Withdraw Funds</h3>
         <p>Docs: <Link href="https://docs.withfabric.xyz/crowdfi/withdrawals" target="_blank" rel="noopener noreferrer">Fabric Crowdfi - Withdrawing Funds</Link></p>
-        <p><strong>Withdrawable Funds:</strong> {tokenToHuman(withdrawableFunds, 18)} ETH</p>
+        <p><strong>Withdrawable Funds:</strong> {tokenToHuman(withdrawableFunds, token ? token.decimals : 18)} ETH</p>
         <SubmitButton type="submit" disabled={isPreparing || isPolling}>{buttonText()}</SubmitButton>
       </form>
     </Parent>

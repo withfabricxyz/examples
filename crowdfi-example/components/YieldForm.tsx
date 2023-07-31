@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { FetchTokenResult } from '@wagmi/core';
 import { TransactionReceipt, parseUnits } from 'viem';
 import styled from 'styled-components';
 import { CampaignAccountContext } from '@withfabric/protocol-sdks';
@@ -42,6 +43,7 @@ const SubmitButton = styled.button`
   border-radius: 0.25rem;
   text-align: center;
   color: white;
+  font-weight: 500;
 
   &:hover {
     cursor: pointer;
@@ -64,13 +66,16 @@ function transformNumberInput(input: string) {
 
 type YieldFormProps = {
   context: CampaignAccountContext;
+  token: FetchTokenResult | undefined | null;
+  onApprove: (receipt: TransactionReceipt) => void;
   onYield: (receipt: TransactionReceipt) => void;
 }
 
-export default function YieldForm({ context, onYield } : YieldFormProps) {
+export default function YieldForm({ context, token, onApprove, onYield } : YieldFormProps) {
   const [yieldAmount, setYieldAmount] = useState<bigint>(0n);
   const [isPreparing, setIsPreparing] = useState<boolean>(false);
   const [isPolling, setIsPolling] = useState<boolean>(false);
+  const [isApproving, setIsApproving] = useState<boolean>(false);
 
   useEffect(() => {
     (async function prepare() {
@@ -78,7 +83,11 @@ export default function YieldForm({ context, onYield } : YieldFormProps) {
 
       setIsPreparing(true);
       try {
-        await context.prepareYield(yieldAmount);
+        if (context.isTokenApprovalRequired(yieldAmount)) {
+          await context.prepareTokenApproval(yieldAmount);
+        } else {
+          await context.prepareYield(yieldAmount);
+        }
       } catch (error) {
         alert(error);
       }
@@ -86,10 +95,29 @@ export default function YieldForm({ context, onYield } : YieldFormProps) {
     })();
   }, [context, yieldAmount]);
 
+  async function approveTokens() {
+    setIsApproving(true);
+    try {
+      const receipt = await context.executeTokenApproval();
+      onApprove(receipt);
+    } catch (error) {
+      alert(error);
+    }
+    setIsApproving(false);
+  }
+
   async function depositYield(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!yieldAmount || isPreparing) return;
+
+    if (context.isTokenApprovalRequired(yieldAmount)) {
+      if (!context.isApprovalPrepared()) {
+        return alert('Approval not prepared');
+      }
+      await approveTokens();
+      return;
+    }
 
     if (!context.isYieldPrepared()) {
       alert('Yield not prepared');
@@ -118,12 +146,14 @@ export default function YieldForm({ context, onYield } : YieldFormProps) {
   }
 
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setYieldAmount(parseUnits(transformNumberInput(e.target.value), 18));
+    setYieldAmount(parseUnits(transformNumberInput(e.target.value), token ? token.decimals : 18));
   }
 
   const buttonText = () => {
     if (isPreparing) return 'Preparing...';
+    if (isApproving) return 'Approving tokens...';
     if (isPolling) return 'Polling for receipt...';
+    if (yieldAmount && context.isTokenApprovalRequired(yieldAmount)) return `Approve ${token?.symbol}`;
     return 'Deposit Yield';
   };
 
@@ -136,7 +166,7 @@ export default function YieldForm({ context, onYield } : YieldFormProps) {
         <Input
           type="number"
           step="0.01"
-          value={tokenToHuman(yieldAmount, 18)}
+          value={tokenToHuman(yieldAmount, token ? token.decimals : 18)}
           onChange={onChange}
         />
         <SubmitButton type="submit" disabled={isPreparing || isPolling}>{buttonText()}</SubmitButton>

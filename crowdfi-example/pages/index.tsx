@@ -1,13 +1,32 @@
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import Head from 'next/head';
 import { useState } from 'react';
-import { getAccount } from '@wagmi/core';
-import styles from '../styles/Home.module.css';
+import { useRouter } from 'next/router';
+import Head from 'next/head';
+import Link from 'next/link';
+import styled from 'styled-components';
+
 import CampaignDeployer from 'components/CampaignDeployer';
-import CampaignViewer from 'components/CampaignViewer';
+
+const Main = styled.main`
+  margin: 1rem auto;
+  width: 75%;
+  max-width: 40rem;
+`;
+
+const Hero = styled.section`
+  background-color: rgba(0, 0, 0, 0.03);
+  padding: 4rem 0 3rem;
+  border-radius: 0.25rem;
+  margin-bottom: 4rem;
+
+  h1, p {
+    width: 75%;
+    max-width: 40rem;
+    margin: auto auto 1rem auto;
+  }
+`;
 
 export default function Home() {
-  const [campaignAddress, setCampaignAddress] = useState<`0x${string}` | null>();
+  const router = useRouter();
   const [isFetching, setIsFetching] = useState<boolean>(false);
 
   return (
@@ -21,26 +40,19 @@ export default function Home() {
         <link rel="manifest" href="/site.webmanifest" />
       </Head>
 
-      <header className={styles.header}>
-        <span>Fabric Crowdfi SDK Example</span>
-        <ConnectButton />
-      </header>
+      <Hero>
+        <h1>Fabric Crowdfi Protocol SDK Example</h1>
+        <p>Deploy a Campaign below to interact</p>
+        <p>Docs: <Link href="https://docs.withfabric.xyz/crowdfi/deployment" target="_blank" rel="noopener noreferrer">Fabric Crowdfi - Deploying a CrowdFi Contract</Link></p>
+      </Hero>
 
-      <main className={styles.main}>
+      <Main>
         <CampaignDeployer
           isFetching={isFetching}
           setIsFetching={setIsFetching}
-          onDeploy={setCampaignAddress}
+          onDeploy={address => router.push(`/campaign/${address}`)}
         />
-        <CampaignViewer
-          isFetching={isFetching}
-          campaignAddress={campaignAddress}
-          account={getAccount().address!}
-        />
-      </main>
-
-      <footer className={styles.footer}>
-      </footer>
+      </Main>
     </div>
   );
 }

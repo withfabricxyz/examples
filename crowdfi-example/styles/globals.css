@@ -35,6 +35,16 @@ p {
   margin-top: 0;
 }
 
+a,
+a:visited {
+  color: rgba(11, 193, 250, 1);
+}
+
+a:hover,
+a:visited:hover {
+  color: rgba(51, 43, 253, 1);
+}
+
 
 /*! normalize.css v8.0.1 | MIT License | github.com/necolas/normalize.css */
 

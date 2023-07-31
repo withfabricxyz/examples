@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { FetchTokenResult } from '@wagmi/core';
 import { TransactionReceipt } from 'viem';
 import styled from 'styled-components';
 import { CampaignAccountContext } from '@withfabric/protocol-sdks';
@@ -10,6 +11,7 @@ type TransferFormProps = {
   context: CampaignAccountContext;
   transferableFunds: bigint;
   recipientAddress: `0x${string}`;
+  token: FetchTokenResult | undefined | null;
   onTransfer: (receipt: TransactionReceipt) => void;
 };
 
@@ -28,6 +30,7 @@ const SubmitButton = styled.button`
   text-align: center;
   color: white;
   margin-top: 0.75rem;
+  font-weight: 500;
 
   &:hover {
     cursor: pointer;
@@ -41,7 +44,7 @@ const SubmitButton = styled.button`
   }
 `;
 
-export default function TransferForm({ context, transferableFunds, recipientAddress, onTransfer } : TransferFormProps) {
+export default function TransferForm({ context, transferableFunds, recipientAddress, token, onTransfer } : TransferFormProps) {
   const [isPreparing, setIsPreparing] = useState<boolean>(false);
   const [isPolling, setIsPolling] = useState<boolean>(false);
 
@@ -88,9 +91,9 @@ export default function TransferForm({ context, transferableFunds, recipientAddr
   return (
     <Parent>
       <form onSubmit={transfer}>
-        <h3>Transfer funds</h3>
+        <h3>Campaign Successful!</h3>
         <p>Docs: <Link href="https://docs.withfabric.xyz/crowdfi/transfer" target="_blank" rel="noopener noreferrer">Fabric Crowdfi - Transferring Funds</Link></p>
-        <p><strong>Transferable Funds:</strong> {tokenToHuman(transferableFunds, 18)} ETH</p>
+        <p><strong>Transferable Funds:</strong> {tokenToHuman(transferableFunds, token ? token.decimals : 18)} ETH</p>
         <p><strong>Recipient Address:</strong> {recipientAddress}</p>
         <SubmitButton type="submit" disabled={isPreparing || isPolling}>{buttonText()}</SubmitButton>
       </form>

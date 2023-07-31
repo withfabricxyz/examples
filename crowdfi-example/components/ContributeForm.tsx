@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { FetchTokenResult } from '@wagmi/core';
 import { TransactionReceipt } from 'viem';
 import styled from 'styled-components';
 import { CampaignAccountContext } from '@withfabric/protocol-sdks';
@@ -25,7 +26,7 @@ const RadioGroup = styled.div`
 const RadioButton = styled.label`
   display: inline-block;
   background-color: rgba(0, 0, 0, 0.03);
-  padding: 0.625rem 0.5rem;
+  padding: 0.625rem 1rem;
   border-radius: 0.25rem;
   text-align: center;
   font-weight: 500;
@@ -43,7 +44,7 @@ const RadioInput = styled.input`
   opacity: 0;
 
   &:checked + ${RadioButton} {
-    background-color: rgba(136, 0, 255, 1);
+    background-color: rgba(251, 66, 223, 1);
     color: white;
   }
 `;
@@ -57,6 +58,7 @@ const SubmitButton = styled.button`
   text-align: center;
   color: white;
   margin-top: 0.75rem;
+  font-weight: 500;
 
   &:hover {
     cursor: pointer;
@@ -72,30 +74,58 @@ const SubmitButton = styled.button`
 
 type ContributeFormProps = {
   context: CampaignAccountContext;
+  token: FetchTokenResult | undefined | null;
+  onApprove: (receipt: TransactionReceipt) => void;
   onContribute: (receipt: TransactionReceipt) => void;
 }
 
-export default function ContributeForm({ context, onContribute } : ContributeFormProps) {
+export default function ContributeForm({ context, token, onApprove, onContribute } : ContributeFormProps) {
   const [contribution, setContribution] = useState<bigint>();
   const [isPreparing, setIsPreparing] = useState<boolean>(false);
   const [isPolling, setIsPolling] = useState<boolean>(false);
+  const [isApproving, setIsApproving] = useState<boolean>(false);
 
   useEffect(() => {
     (async function prepare() {
       if (!contribution) return;
 
       setIsPreparing(true);
+
       try {
-        await context.prepareContribution(contribution!);
+        if (context.isTokenApprovalRequired(contribution)) {
+          await context.prepareTokenApproval(contribution);
+        } else {
+          await context.prepareContribution(contribution!);
+        }
       } catch (error) {
-        alert(error);
+        console.error(error);
       }
+
       setIsPreparing(false);
     })();
   }, [context, contribution]);
 
+  async function approveTokens() {
+    setIsApproving(true);
+    try {
+      const receipt = await context.executeTokenApproval();
+      onApprove(receipt);
+    } catch (error) {
+      alert(error);
+    }
+    setIsApproving(false);
+  }
+
   async function contribute() {
     if (!contribution || isPreparing) return;
+
+    if (context.isTokenApprovalRequired(contribution)) {
+      if (!context.isApprovalPrepared()) {
+        return alert('Approval not prepared');
+      }
+      await approveTokens();
+      return;
+    }
 
     if (!context.isContributionPrepared()) {
       alert('Contribution not prepared');
@@ -125,9 +155,12 @@ export default function ContributeForm({ context, onContribute } : ContributeFor
   }
 
   const buttonText = () => {
+    if (!contribution) return 'Select an amount';
     if (isPreparing) return 'Preparing...';
+    if (isApproving) return 'Approving tokens...';
     if (isPolling) return 'Polling for receipt...';
-    return 'Contribute';
+    if (contribution && context.isTokenApprovalRequired(contribution)) return `Approve ${token?.symbol}`;
+    return `Contribute ${token?.symbol || 'ETH'}`;
   };
 
   return (
@@ -144,7 +177,7 @@ export default function ContributeForm({ context, onContribute } : ContributeFor
             id="contribution-min"
             onChange={e => setContribution(BigInt(e.target.value))}
           />
-          <RadioButton htmlFor="contribution-min">{tokenToHuman(context.account.minAllowedContribution, 18)} (min)</RadioButton>
+          <RadioButton htmlFor="contribution-min">{tokenToHuman(context.account.minAllowedContribution, token ? token.decimals : 18)} (min)</RadioButton>
         </RadioGroup>
         <RadioGroup>
           <RadioInput
@@ -155,7 +188,7 @@ export default function ContributeForm({ context, onContribute } : ContributeFor
             id="contribution-mid"
             onChange={e => setContribution(BigInt(e.target.value))}
           />
-          <RadioButton htmlFor="contribution-mid">{tokenToHuman(context.account.maxAllowedContribution / 2n, 18)} (mid)</RadioButton>
+          <RadioButton htmlFor="contribution-mid">{tokenToHuman(context.account.maxAllowedContribution / 2n, token ? token.decimals : 18)} (mid)</RadioButton>
         </RadioGroup>
         <RadioGroup>
           <RadioInput
@@ -166,11 +199,11 @@ export default function ContributeForm({ context, onContribute } : ContributeFor
             id="contribution-max"
             onChange={e => setContribution(BigInt(e.target.value))}
           />
-          <RadioButton htmlFor="contribution-max">{tokenToHuman(context.account.maxAllowedContribution, 18)} (max)</RadioButton>
+          <RadioButton htmlFor="contribution-max">{tokenToHuman(context.account.maxAllowedContribution, token ? token.decimals : 18)} (max)</RadioButton>
         </RadioGroup>
       </Form>
       <div>
-        <SubmitButton onClick={contribute} disabled={isPreparing || isPolling}>{buttonText()}</SubmitButton>
+        <SubmitButton onClick={contribute} disabled={isPreparing || isPolling || !contribution || isApproving}>{buttonText()}</SubmitButton>
       </div>
     </Parent>
   );
